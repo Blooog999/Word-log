@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Word Log</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef2ef;--card:#fff;--ink:#14211c;--mute:#5d6f68;--jade:#1d6b57;--line:#cfd9d4;--seal:#b5322a}
+@media(prefers-color-scheme:dark){:root{--bg:#121a17;--card:#1a2622;--ink:#e6efeb;--mute:#93a79f;--jade:#4fb497;--line:#2c3c36;--seal:#e06b61}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Figtree,system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+header{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+h1{font:700 1.4rem 'Noto Serif SC',serif;margin:0;flex:none}
+input,select,button{font:inherit;color:inherit;border:1px solid var(--line);background:var(--card);border-radius:6px;padding:8px 10px}
+input,select{width:100%}
+button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--jade)}
+button.pri{background:var(--jade);border-color:var(--jade);color:#fff}
+nav{display:flex;gap:6px;margin-bottom:12px}nav button{flex:1}nav button.on{border-color:var(--jade);color:var(--jade);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px}
+.w{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line)}
+.w:last-child{border:0}.h{font:700 1.5rem 'Noto Serif SC',serif}.p{color:var(--jade);font-weight:600}
+.e{grid-column:1/3}.m{grid-column:1/3;font-size:.8rem;color:var(--mute)}.w button{grid-row:1;grid-column:3;padding:2px 8px;color:var(--seal)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal b{font-size:.75rem;color:var(--mute);font-weight:400}
+.d{min-height:52px;padding:4px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-size:.85rem}
+.d.has{border-color:var(--jade)}.d.sel{background:var(--jade);color:#fff}.d i{display:block;font-style:normal;font-weight:700;color:var(--jade)}.d.sel i{color:#fff}
+.row{display:grid;gap:8px;margin-bottom:8px}.two{grid-template-columns:1fr 1fr}
+#sug{list-style:none;padding:0;margin:0 0 10px}#sug li{padding:8px;border:1px solid var(--line);border-radius:6px;margin-bottom:4px;cursor:pointer;background:var(--card)}
+#sug li:hover{border-color:var(--jade)}
+details summary{cursor:pointer;font-weight:600;padding:6px 0}.mute{color:var(--mute)}
+[hidden]{display:none!important}
+</style></head><body><main>
+
+<section id="auth" class="card" hidden>
+ <h1>Word Log</h1><p class="mute">Sign in so your words sync across your phone and computer.</p>
+ <div class="row"><input id="em" type="email" placeholder="Email" autocomplete="email"><input id="pw" type="password" placeholder="Password (6+ characters)" autocomplete="current-password"></div>
+ <div class="row two"><button class="pri" id="in">Sign in</button><button id="up">Create account</button></div>
+ <p id="amsg" class="mute"></p>
+</section>
+
+<section id="app" hidden>
+ <header><h1>词 Word Log</h1><input id="q" type="search" placeholder="Search English, pinyin or 汉字"><button id="out">Sign out</button></header>
+ <nav id="tabs"><button data-v="cal">Calendar</button><button data-v="cat">Categories</button><button data-v="add">Add word</button></nav>
+ <div id="view"></div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL='https://inbnlhbweavowbpkauog.supabase.co/rest/v1/', SUPABASE_KEY='sb_publishable_BUNOrihdyX9ATNrDw3v69Q_KZHhGMhj';
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const STARTER=['Action verbs','Nouns: food','Nouns: people & family','Nouns: places','Nouns: objects','Adjectives','Adverbs','Feelings & emotions','Common sayings','Other'];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const todayStr=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+let words=[],dict=[],view='cal',cur=new Date(),sel=todayStr(),dictOK=false;
+
+/* pinyin helpers */
+const TONES={a:'āáǎà',e:'ēéěè',o:'ōóǒò',i:'īíǐì',u:'ūúǔù','ü':'ǖǘǚǜ'};
+function toneMark(s){return s.split(' ').map(sy=>{const m=sy.match(/^([A-Za-z:ü]+)([1-5])$/);if(!m)return sy;
+ const w=m[1].replace(/u:/g,'ü'),t=+m[2];if(t===5)return w;let i=w.search(/[aeAE]/);
+ if(i<0&&/ou/i.test(w))i=w.search(/o/i);
+ if(i<0)for(let j=w.length-1;j>=0;j--)if('iouüIOUÜ'.includes(w[j])){i=j;break}
+ if(i<0)return w;const c=w[i].toLowerCase();return w.slice(0,i)+TONES[c][t-1]+w.slice(i+1)}).join(' ')}
+const plain=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/u:/g,'u').replace(/[^a-z]/g,'');
+
+/* dictionary (CC-CEDICT) */
+async function loadDict(){try{const r=await fetch('cedict_ts.u8');if(!r.ok)throw 0;const t=await r.text();
+ for(const l of t.split('\n')){if(l[0]==='#')continue;const m=l.match(/^(\S+) (\S+) \[([^\]]+)\] \/(.*)\/$/);if(!m)continue;
+  const d=m[4].split('/');dict.push({s:m[2],p:m[3],k:plain(m[3]),d,dl:d.join('; ').toLowerCase()})}dictOK=true}catch(e){dictOK=false}}
+function suggest(q){q=q.trim();if(!q||!dictOK)return[];const lo=q.toLowerCase();let out;
+ if(/[\u4e00-\u9fff]/.test(q))out=dict.filter(e=>e.s===q).concat(dict.filter(e=>e.s!==q&&e.s.startsWith(q)));
+ else{const k=plain(q);out=dict.filter(e=>e.d.some(x=>x===lo||x==='to '+lo)).concat(k?dict.filter(e=>e.k===k):[],dict.filter(e=>e.dl.includes(lo)))}
+ return[...new Set(out)].slice(0,8)}
+
+/* auth */
+async function boot(){const{data:{session}}=await db.auth.getSession();session?start():($('auth').hidden=false)}
+async function start(){$('auth').hidden=true;$('app').hidden=false;$('view').innerHTML='<p class="mute">Loading…</p>';
+ await Promise.all([loadDict(),loadWords()]);render()}
+$('in').onclick=async()=>{const{error}=await db.auth.signInWithPassword({email:$('em').value,password:$('pw').value});error?$('amsg').textContent=error.message:start()};
+$('up').onclick=async()=>{const{data,error}=await db.auth.signUp({email:$('em').value,password:$('pw').value});
+ if(error)$('amsg').textContent=error.message;else if(data.session)start();else $('amsg').textContent='Check your email to confirm, then sign in.'};
+$('out').onclick=async()=>{await db.auth.signOut();location.reload()};
+
+/* data */
+async function loadWords(){const{data,error}=await db.from('words').select('*').order('created_at',{ascending:false}).range(0,4999);words=error?[]:data}
+const cats=()=>[...new Set([...STARTER,...words.map(w=>w.category).filter(Boolean)])];
+const wordHTML=w=>`<div class="w"><span class="h">${esc(w.hanzi)}</span><span class="p">${esc(w.pinyin)}</span><button data-del="${w.id}" aria-label="Delete ${esc(w.hanzi)}">✕</button><span class="e">${esc(w.english)}</span><span class="m">${esc(w.category)}, learnt ${esc(w.learned_on)}</span></div>`;
+const list=a=>a.length?a.map(wordHTML).join(''):'<p class="mute">No words yet.</p>';
+
+/* views */
+function render(){document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===view&&!$('q').value));
+ const q=$('q').value.trim();const v=$('view');
+ if(q){const k=plain(q),lo=q.toLowerCase();
+  const r=words.filter(w=>w.hanzi.includes(q)||(w.english||'').toLowerCase().includes(lo)||(k&&plain(w.pinyin||'').includes(k)));
+  v.innerHTML=`<div class="card"><p class="mute">${r.length} result(s)</p>${list(r)}</div>`;return}
+ if(view==='cal')return calView(v);if(view==='cat')return catView(v);addView(v)}
+function calView(v){const y=cur.getFullYear(),m=cur.getMonth(),n=new Date(y,m+1,0).getDate(),off=new Date(y,m,1).getDay();
+ const by={};words.forEach(w=>by[w.learned_on]=(by[w.learned_on]||0)+1);
+ let g=['S','M','T','W','T','F','S'].map(d=>`<b>${d}</b>`).join('')+'<span></span>'.repeat(off);
+ for(let d=1;d<=n;d++){const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  g+=`<button class="d ${by[ds]?'has':''} ${ds===sel?'sel':''}" data-day="${ds}">${d}${by[ds]?`<i>${by[ds]}</i>`:''}</button>`}
+ v.innerHTML=`<div class="card"><div class="row two"><button data-mo="-1">Previous</button><button data-mo="1">Next</button></div>
+ <h2 style="margin:4px 0 10px">${cur.toLocaleString('en',{month:'long',year:'numeric'})}</h2><div class="cal">${g}</div></div>
+ <div class="card"><h3 style="margin:0">${sel}</h3>${list(words.filter(w=>w.learned_on===sel))}</div>`}
+function catView(v){v.innerHTML=cats().map(c=>{const a=words.filter(w=>w.category===c);
+ return a.length?`<details class="card"><summary>${esc(c)} <span class="mute">(${a.length})</span></summary>${list(a)}</details>`:''}).join('')||'<p class="mute">Add your first word to see categories.</p>'}
+function addView(v){v.innerHTML=`<div class="card"><p class="mute">${dictOK?'Type any one field and pick a suggestion to fill the rest.':'Dictionary file cedict_ts.u8 not found, so auto-fill is off. Fill the fields yourself.'}</p>
+ <div class="row"><input id="fh" placeholder="Chinese characters" lang="zh"><input id="fp" placeholder="Pinyin (e.g. nǐ hǎo)"><input id="fe" placeholder="English meaning"></div>
+ <ul id="sug"></ul>
+ <div class="row two"><div><input id="fc" list="cl" placeholder="Category"><datalist id="cl">${cats().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div><input id="fd" type="date" value="${todayStr()}"></div>
+ <button class="pri" id="save">Save word</button> <span id="fmsg" class="mute"></span></div>`;
+ ['fh','fp','fe'].forEach(id=>$(id).oninput=e=>{clearTimeout(window.t);window.t=setTimeout(()=>{const r=suggest(e.target.value);window.sg=r;
+  $('sug').innerHTML=r.map((x,i)=>`<li data-i="${i}"><b>${esc(x.s)}</b> ${esc(toneMark(x.p))} <span class="mute">${esc(x.d.slice(0,3).join('; '))}</span></li>`).join('')},200)});
+ $('sug').onclick=e=>{const li=e.target.closest('li');if(!li)return;const x=window.sg[li.dataset.i];
+  $('fh').value=x.s;$('fp').value=toneMark(x.p);$('fe').value=x.d.slice(0,3).join('; ');$('sug').innerHTML=''};
+ $('save').onclick=async()=>{const r={hanzi:$('fh').value.trim(),pinyin:$('fp').value.trim(),english:$('fe').value.trim(),category:$('fc').value.trim()||'Other',learned_on:$('fd').value||todayStr()};
+  if(!r.hanzi&&!r.english)return $('fmsg').textContent='Enter at least the characters or the meaning.';
+  const{error}=await db.from('words').insert(r);if(error)return $('fmsg').textContent=error.message;
+  sel=r.learned_on;await loadWords();addView(v);$('fmsg').textContent='Saved.'}}
+
+/* events */
+$('q').oninput=render;
+document.addEventListener('click',async e=>{const t=e.target;
+ if(t.dataset.v){$('q').value='';view=t.dataset.v;render()}
+ else if(t.dataset.day){sel=t.dataset.day;render()}
+ else if(t.dataset.mo){cur=new Date(cur.getFullYear(),cur.getMonth()+ +t.dataset.mo,1);render()}
+ else if(t.dataset.del&&confirm('Delete this word?')){await db.from('words').delete().eq('id',t.dataset.del);await loadWords();render()}});
+boot();
+</script></main></body></html>
